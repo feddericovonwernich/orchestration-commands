@@ -16,6 +16,26 @@ chmod +x ./install.sh
 ./install.sh
 ```
 
+## One-liner curl installers
+
+- Project install (current directory):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/feddericovonwernich/orchestration-commands/main/install.sh | bash -s -- --scope project --path "$(pwd)"
+```
+
+- Global install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/feddericovonwernich/orchestration-commands/main/install.sh | bash -s -- --scope global
+```
+
+- Project install with custom command name and loop cap:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/feddericovonwernich/orchestration-commands/main/install.sh | bash -s -- --scope project --path "$(pwd)" --command-name ship --max-loops 4
+```
+
 ## Common options
 
 ```bash
