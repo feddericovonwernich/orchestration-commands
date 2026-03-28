@@ -71,6 +71,26 @@ curl -fsSL https://raw.githubusercontent.com/feddericovonwernich/orchestration-c
 /orchestrate exec --no-commit <approved plan text>
 ```
 
+## Testing `/orchestrate`
+
+- Run contract checks (no model/provider needed):
+
+```bash
+bash tests/run.sh
+```
+
+- Run live smoke checks too (requires `opencode` CLI + provider auth):
+
+```bash
+OPENCODE_LIVE_TEST=1 bash tests/run.sh
+```
+
+- Optional: customize live test timeout (seconds):
+
+```bash
+OPENCODE_LIVE_TEST=1 OPENCODE_LIVE_TIMEOUT=180 bash tests/orchestrate-live.test.sh
+```
+
 ## Notes
 
 - Auto mode runs in `plan` agent with `subtask: false` so planning questions stay in the main context window.
