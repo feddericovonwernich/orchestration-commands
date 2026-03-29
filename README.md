@@ -49,6 +49,9 @@ curl -fsSL https://raw.githubusercontent.com/feddericovonwernich/orchestration-c
 
 - Installer content comes from repository files under `.opencode/`.
 - Re-running `install.sh` updates existing installed files to match the current source (with backups unless `--force`).
+- Backups are written outside OpenCode's config scan path by default:
+  - project scope: `<project>/.opencode-install-backups/`
+  - global scope: `~/.config/opencode-install-backups/`
 - If local `.opencode/` sources are unavailable (for example one-line curl install), installer falls back to remote raw files.
 - You can pin remote fallback source with:
 
@@ -60,6 +63,12 @@ ORCHESTRATION_COMMANDS_SOURCE_REF=<branch-or-tag> ./install.sh --scope project -
 
 ```bash
 ORCHESTRATION_COMMANDS_SOURCE_BASE_URL="https://raw.githubusercontent.com/<owner>/<repo>/<ref>/.opencode" ./install.sh --scope project --path "$(pwd)"
+```
+
+- Optional: override backup location directly:
+
+```bash
+ORCHESTRATION_COMMANDS_BACKUP_DIR="/path/to/backups" ./install.sh --scope project --path "$(pwd)"
 ```
 
 ## Command usage
