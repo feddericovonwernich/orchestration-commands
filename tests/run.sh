@@ -3,6 +3,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+printf '==> installer regression tests\n'
+bash "$ROOT_DIR/tests/install.test.sh"
+
+printf '\n'
 printf '==> /orchestrate contract tests\n'
 bash "$ROOT_DIR/tests/orchestrate-contract.test.sh"
 
