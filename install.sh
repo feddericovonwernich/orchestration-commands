@@ -12,6 +12,7 @@ TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 DEFAULT_SOURCE_REPO="feddericovonwernich/orchestration-commands"
 DEFAULT_SOURCE_REF="${ORCHESTRATION_COMMANDS_SOURCE_REF:-main}"
 SOURCE_BASE_URL="${ORCHESTRATION_COMMANDS_SOURCE_BASE_URL:-https://raw.githubusercontent.com/${DEFAULT_SOURCE_REPO}/${DEFAULT_SOURCE_REF}/.opencode}"
+BACKUP_DIR_OVERRIDE="${ORCHESTRATION_COMMANDS_BACKUP_DIR:-}"
 
 usage() {
   cat <<'EOF'
@@ -30,6 +31,7 @@ Options:
 Environment variables:
   ORCHESTRATION_COMMANDS_SOURCE_REF       Git ref for remote source fallback (default: main)
   ORCHESTRATION_COMMANDS_SOURCE_BASE_URL  Full base URL for remote source fallback
+  ORCHESTRATION_COMMANDS_BACKUP_DIR       Override backup directory for overwritten files
 
 Examples:
   ./install.sh --scope project
@@ -138,13 +140,16 @@ install_from_source() {
   if [[ "$DRY_RUN" == "1" ]]; then
     log "[dry-run] Would write: $target"
     if [[ -e "$target" && "$FORCE" == "0" ]]; then
-      log "[dry-run] Would backup existing file: ${target}.bak.${TIMESTAMP}"
+      local backup
+      backup="$(backup_path_for_target "$target")"
+      log "[dry-run] Would backup existing file: $backup"
     fi
   else
     mkdir -p "$(dirname "$target")"
     if [[ -e "$target" && "$FORCE" == "0" ]]; then
       local backup
-      backup="${target}.bak.${TIMESTAMP}"
+      backup="$(backup_path_for_target "$target")"
+      mkdir -p "$(dirname "$backup")"
       cp "$target" "$backup"
       log "Backed up: $target -> $backup"
     fi
@@ -153,6 +158,18 @@ install_from_source() {
   fi
 
   rm -f "$tmp_rendered"
+}
+
+backup_path_for_target() {
+  local target="$1"
+  local relative
+
+  relative="${target#$BASE_DIR/}"
+  if [[ "$relative" == "$target" ]]; then
+    die "Cannot compute backup path outside base directory: $target"
+  fi
+
+  printf '%s/%s.bak.%s\n' "$BACKUP_DIR" "$relative" "$TIMESTAMP"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -229,8 +246,16 @@ if [[ "$SCOPE" == "project" ]]; then
   fi
   [[ -d "$PROJECT_PATH" ]] || die "Project path does not exist: $PROJECT_PATH"
   BASE_DIR="$PROJECT_PATH/.opencode"
+  DEFAULT_BACKUP_DIR="$PROJECT_PATH/.opencode-install-backups"
 else
   BASE_DIR="$HOME/.config/opencode"
+  DEFAULT_BACKUP_DIR="$HOME/.config/opencode-install-backups"
+fi
+
+if [[ -n "$BACKUP_DIR_OVERRIDE" ]]; then
+  BACKUP_DIR="$BACKUP_DIR_OVERRIDE"
+else
+  BACKUP_DIR="$DEFAULT_BACKUP_DIR"
 fi
 
 AGENTS_DIR="$BASE_DIR/agents"
@@ -246,6 +271,7 @@ fi
 
 if [[ "$DRY_RUN" == "1" ]]; then
   log "[dry-run] Target base: $BASE_DIR"
+  log "[dry-run] Backup dir: $BACKUP_DIR"
   log "[dry-run] Scope: $SCOPE"
   log "[dry-run] Command name: /$COMMAND_NAME"
   log "[dry-run] Max loops: $MAX_LOOPS"
