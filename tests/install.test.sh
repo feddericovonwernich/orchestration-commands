@@ -96,29 +96,33 @@ assert_not_contains "$case2_dir/.opencode/agents/orchestrator-loop.md" '- Max lo
 
 # Case 3: reinstall creates backups by default.
 case3_dir="$TMP_ROOT/case3-project"
+case3_backup_dir="$case3_dir/.opencode-install-backups"
 mkdir -p "$case3_dir"
 run_install "$ROOT_DIR" "$ROOT_DIR/install.sh" --scope project --path "$case3_dir"
 printf '# user edit\n' >>"$case3_dir/.opencode/agents/reviewer.md"
 run_install "$ROOT_DIR" "$ROOT_DIR/install.sh" --scope project --path "$case3_dir"
 
 shopt -s nullglob
-case3_backups=("$case3_dir/.opencode/agents/reviewer.md.bak."*)
+case3_backups=("$case3_backup_dir/agents/reviewer.md.bak."*)
 shopt -u nullglob
 if [[ ${#case3_backups[@]} -lt 1 ]]; then
   printf 'FAIL: expected backup reviewer file on reinstall\n' >&2
   exit 1
 fi
 PASS_COUNT=$((PASS_COUNT + 1))
+assert_no_files_match "$case3_dir/.opencode/agents/reviewer.md.bak.*"
 assert_not_contains "$case3_dir/.opencode/agents/reviewer.md" '# user edit'
 
 # Case 4: --force overwrites without backups.
 case4_dir="$TMP_ROOT/case4-project"
+case4_backup_dir="$case4_dir/.opencode-install-backups"
 mkdir -p "$case4_dir"
 run_install "$ROOT_DIR" "$ROOT_DIR/install.sh" --scope project --path "$case4_dir"
 printf '# local tweak\n' >>"$case4_dir/.opencode/agents/reviewer.md"
 run_install "$ROOT_DIR" "$ROOT_DIR/install.sh" --scope project --path "$case4_dir" --force
 
 assert_no_files_match "$case4_dir/.opencode/agents/reviewer.md.bak.*"
+assert_no_files_match "$case4_backup_dir/agents/reviewer.md.bak.*"
 assert_not_contains "$case4_dir/.opencode/agents/reviewer.md" '# local tweak'
 
 # Case 5: fallback source works when script has no local .opencode directory.
