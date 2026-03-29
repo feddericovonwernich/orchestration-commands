@@ -18,13 +18,7 @@ permission:
     "impl-worker": allow
     "reviewer": allow
   bash:
-    "*": deny
-    "git rev-parse*": allow
-    "git status*": allow
-    "git diff*": allow
-    "git add*": allow
-    "git commit*": allow
-    "git log*": allow
+    "*": allow
 ---
 
 You are the orchestration controller.

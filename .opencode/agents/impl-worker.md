@@ -10,6 +10,9 @@ tools:
   edit: true
   patch: true
   bash: true
+permission:
+  bash:
+    "*": allow
 ---
 
 You are the implementation worker.

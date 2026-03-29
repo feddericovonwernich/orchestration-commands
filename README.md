@@ -45,6 +45,23 @@ curl -fsSL https://raw.githubusercontent.com/feddericovonwernich/orchestration-c
 ./install.sh --dry-run
 ```
 
+## Installer source of truth
+
+- Installer content comes from repository files under `.opencode/`.
+- Re-running `install.sh` updates existing installed files to match the current source (with backups unless `--force`).
+- If local `.opencode/` sources are unavailable (for example one-line curl install), installer falls back to remote raw files.
+- You can pin remote fallback source with:
+
+```bash
+ORCHESTRATION_COMMANDS_SOURCE_REF=<branch-or-tag> ./install.sh --scope project --path "$(pwd)"
+```
+
+- Or override the fallback base URL directly:
+
+```bash
+ORCHESTRATION_COMMANDS_SOURCE_BASE_URL="https://raw.githubusercontent.com/<owner>/<repo>/<ref>/.opencode" ./install.sh --scope project --path "$(pwd)"
+```
+
 ## Command usage
 
 - Auto mode (plan in main context first):
@@ -69,6 +86,26 @@ curl -fsSL https://raw.githubusercontent.com/feddericovonwernich/orchestration-c
 
 ```txt
 /orchestrate exec --no-commit <approved plan text>
+```
+
+## Testing `/orchestrate`
+
+- Run installer + contract checks (no model/provider needed):
+
+```bash
+bash tests/run.sh
+```
+
+- Run live smoke checks too (requires `opencode` CLI + provider auth):
+
+```bash
+OPENCODE_LIVE_TEST=1 bash tests/run.sh
+```
+
+- Optional: customize live test timeout (seconds):
+
+```bash
+OPENCODE_LIVE_TEST=1 OPENCODE_LIVE_TIMEOUT=180 bash tests/orchestrate-live.test.sh
 ```
 
 ## Notes
