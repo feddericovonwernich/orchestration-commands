@@ -32,6 +32,19 @@ assert_contains() {
   PASS_COUNT=$((PASS_COUNT + 1))
 }
 
+assert_not_contains() {
+  local file="$1"
+  local forbidden="$2"
+
+  if grep -Fq -- "$forbidden" "$file"; then
+    printf 'FAIL: forbidden text found in %s\n' "$file" >&2
+    printf 'Forbidden: %s\n' "$forbidden" >&2
+    exit 1
+  fi
+
+  PASS_COUNT=$((PASS_COUNT + 1))
+}
+
 printf 'Running contract checks for /orchestrate ...\n'
 
 assert_file_exists "$COMMAND_FILE"
@@ -57,6 +70,7 @@ assert_contains "$ORCHESTRATOR_AGENT" 'If commit mode is ON, create exactly one 
 assert_contains "$ORCHESTRATOR_AGENT" 'If commit mode is OFF, do not create commits.'
 assert_contains "$ORCHESTRATOR_AGENT" 'Never run `git push`, `git reset`, `git checkout`, or `git commit --amend`.'
 assert_contains "$ORCHESTRATOR_AGENT" 'Commit message format: `orchestrate(loop N): <step summary>`.'
+assert_contains "$ORCHESTRATOR_AGENT" '    "*": allow'
 assert_contains "$ORCHESTRATOR_AGENT" '- VERDICT: PASS or FAIL'
 assert_contains "$ORCHESTRATOR_AGENT" '- OUTCOME: PASS or PARTIAL'
 
@@ -64,7 +78,11 @@ assert_contains "$ORCHESTRATOR_AGENT" '- OUTCOME: PASS or PARTIAL'
 assert_contains "$IMPL_AGENT" '- STATUS: DONE or BLOCKED'
 assert_contains "$IMPL_AGENT" '- CHANGES: bullet list of file changes'
 assert_contains "$IMPL_AGENT" '- COMMANDS_RUN: bullet list with command + short result'
+assert_contains "$IMPL_AGENT" 'permission:'
+assert_contains "$IMPL_AGENT" '    "*": allow'
 assert_contains "$REVIEWER_AGENT" '- Do not edit files.'
+assert_contains "$REVIEWER_AGENT" '    "*": allow'
+assert_not_contains "$REVIEWER_AGENT" '    "*": ask'
 assert_contains "$REVIEWER_AGENT" '- VERDICT: PASS or FAIL'
 assert_contains "$REVIEWER_AGENT" '- MUST_FIX: bullet list (required when FAIL)'
 

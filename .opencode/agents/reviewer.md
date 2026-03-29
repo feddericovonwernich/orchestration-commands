@@ -12,29 +12,7 @@ tools:
   patch: false
 permission:
   bash:
-    "*": ask
-    "npm test*": allow
-    "npm run test*": allow
-    "npm run lint*": allow
-    "npm run build*": allow
-    "pnpm test*": allow
-    "pnpm run test*": allow
-    "pnpm run lint*": allow
-    "pnpm run build*": allow
-    "yarn test*": allow
-    "yarn run test*": allow
-    "yarn run lint*": allow
-    "yarn run build*": allow
-    "bun test*": allow
-    "bun run test*": allow
-    "bun run lint*": allow
-    "bun run build*": allow
-    "pytest*": allow
-    "go test*": allow
-    "cargo test*": allow
-    "git status*": allow
-    "git diff*": allow
-    "git log*": allow
+    "*": allow
 ---
 
 You are the reviewer.
