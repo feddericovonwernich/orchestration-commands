@@ -49,6 +49,9 @@ curl -fsSL https://raw.githubusercontent.com/feddericovonwernich/orchestration-c
 
 - Installer content comes from repository files under `.opencode/`.
 - Re-running `install.sh` updates existing installed files to match the current source (with backups unless `--force`).
+- Backups are written outside OpenCode's config scan path by default:
+  - project scope: `<project>/.opencode-install-backups/`
+  - global scope: `~/.config/opencode-install-backups/`
 - If local `.opencode/` sources are unavailable (for example one-line curl install), installer falls back to remote raw files.
 - You can pin remote fallback source with:
 
@@ -60,6 +63,12 @@ ORCHESTRATION_COMMANDS_SOURCE_REF=<branch-or-tag> ./install.sh --scope project -
 
 ```bash
 ORCHESTRATION_COMMANDS_SOURCE_BASE_URL="https://raw.githubusercontent.com/<owner>/<repo>/<ref>/.opencode" ./install.sh --scope project --path "$(pwd)"
+```
+
+- Optional: override backup location directly:
+
+```bash
+ORCHESTRATION_COMMANDS_BACKUP_DIR="/path/to/backups" ./install.sh --scope project --path "$(pwd)"
 ```
 
 ## Command usage
@@ -82,10 +91,18 @@ ORCHESTRATION_COMMANDS_SOURCE_BASE_URL="https://raw.githubusercontent.com/<owner
 /orchestrate exec <approved plan text>
 ```
 
+- Resume mode (no args: reuse latest approved plan from current conversation):
+
+```txt
+/orchestrate
+```
+
+If no approved plan is found in context, the command asks you to paste a full approved plan or provide a goal for auto-planning.
+
 - Exec mode with commits disabled for this run:
 
 ```txt
-/orchestrate exec --no-commit <approved plan text>
+/orchestrate --no-commit exec <approved plan text>
 ```
 
 ## Testing `/orchestrate`
@@ -112,6 +129,8 @@ OPENCODE_LIVE_TEST=1 OPENCODE_LIVE_TIMEOUT=180 bash tests/orchestrate-live.test.
 
 - Auto mode runs in `plan` agent with `subtask: false` so planning questions stay in the main context window.
 - Implementation starts only after explicit `APPROVE` in auto mode.
+- Approved phased plans are executed phase-by-phase; the next phase starts only after reviewer `PASS` on the current phase.
+- Max loops is a per-phase cap. If a phase reaches cap without `PASS`, orchestration stops as `PARTIAL` and reports remaining phases.
 - Commit mode is runtime-configurable: default ON, disable with `--no-commit`, re-enable with `--commit`.
 - When commit mode is ON, orchestrator commits after each implementation loop when changes exist, with message format `orchestrate(loop N): <step summary>`.
 - Orchestrator never pushes, amends, or runs destructive git commands.
