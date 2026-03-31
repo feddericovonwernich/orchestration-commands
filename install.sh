@@ -116,7 +116,6 @@ apply_max_loops_replacements() {
 
   sed -E \
     -e "s/(Max loops: )[0-9]+/\\1${MAX_LOOPS}/g" \
-    -e "s/(Stop when loops reach )[0-9]+/\\1${MAX_LOOPS}/g" \
     -e "s|(LOOPS_USED: n/)[0-9]+|\\1${MAX_LOOPS}|g" \
     -e "s/(max loops )[0-9]+/\\1${MAX_LOOPS}/g" \
     "$file" >"${file}.tmp"

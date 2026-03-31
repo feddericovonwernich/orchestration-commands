@@ -68,8 +68,18 @@ assert_live_case \
   opencode run --command orchestrate exec
 
 assert_live_case \
+  'no-arg resume mode falls back to plan-or-goal prompt' \
+  'approved plan|paste.*plan|provide a goal|goal so auto-planning can begin' \
+  opencode run --command orchestrate
+
+assert_live_case \
   'exec mode with --no-commit reflects disabled commits' \
   'no-commit|commit mode|disabled' \
   opencode run --command orchestrate -- --no-commit exec "1. Add a placeholder verification step."
+
+assert_live_case \
+  'phased exec mode reflects phase-aware execution' \
+  'phase-by-phase|one phase at a time|PHASE_PROGRESS|REMAINING_PHASES|current phase' \
+  opencode run --command orchestrate -- exec "Phase 1: Add a tiny documentation note. Phase 2: Validate and summarize changes."
 
 printf 'PASS: %d live smoke checks\n' "$PASS_COUNT"

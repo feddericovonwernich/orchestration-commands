@@ -89,7 +89,7 @@ mkdir -p "$case2_dir"
 run_install "$ROOT_DIR" "$ROOT_DIR/install.sh" --scope project --path "$case2_dir" --max-loops 7
 
 assert_contains "$case2_dir/.opencode/agents/orchestrator-loop.md" '- Max loops: 7'
-assert_contains "$case2_dir/.opencode/agents/orchestrator-loop.md" '10. Stop when loops reach 7.'
+assert_contains "$case2_dir/.opencode/agents/orchestrator-loop.md" '- Max loops: 7 (per phase cap)'
 assert_contains "$case2_dir/.opencode/agents/orchestrator-loop.md" '- LOOPS_USED: n/7'
 assert_contains "$case2_dir/.opencode/commands/orchestrate.md" 'max loops 7'
 assert_not_contains "$case2_dir/.opencode/agents/orchestrator-loop.md" '- Max loops: 3'
