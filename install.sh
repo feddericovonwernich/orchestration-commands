@@ -3,15 +3,16 @@ set -euo pipefail
 
 SCOPE="ask"
 PROJECT_PATH=""
-COMMAND_NAME="orchestrate"
-MAX_LOOPS="3"
+CLONE_DIR=""
 FORCE="0"
+CLEAN="0"
 DRY_RUN="0"
-TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+NO_PROMPT="0"
 
 DEFAULT_SOURCE_REPO="feddericovonwernich/orchestration-commands"
-DEFAULT_SOURCE_REF="${ORCHESTRATION_COMMANDS_SOURCE_REF:-main}"
-SOURCE_BASE_URL="${ORCHESTRATION_COMMANDS_SOURCE_BASE_URL:-https://raw.githubusercontent.com/${DEFAULT_SOURCE_REPO}/${DEFAULT_SOURCE_REF}/.opencode}"
+DEFAULT_SOURCE_REF="main"
+REPO="${DEFAULT_SOURCE_REPO}"
+REF="${DEFAULT_SOURCE_REF}"
 BACKUP_DIR_OVERRIDE="${ORCHESTRATION_COMMANDS_BACKUP_DIR:-}"
 
 usage() {
@@ -22,21 +23,22 @@ Usage:
 Options:
   --scope <project|global|ask>   Install scope (default: ask)
   --path <project-dir>           Project directory for project scope (default: current directory)
-  --command-name <name>          Slash command name (default: orchestrate)
-  --max-loops <n>                Maximum implementation/review loops (default: 3)
-  --force                        Overwrite files without backups
+  --clone-dir <path>             Local checkout path (default: prompt or ~/.local/share/opencode/sources/orchestration-commands)
+  --repo <owner/name>            GitHub repository to clone (default: feddericovonwernich/orchestration-commands)
+  --ref <git-ref>                Git branch/tag/commit for first clone (default: main)
+  --force                        Replace files that already exist
+  --clean                        Remove current install targets and backup directory before linking
   --dry-run                      Show actions without writing files
+  --no-prompt                    Never prompt; use defaults for omitted values
   -h, --help                     Show this help
 
 Environment variables:
-  ORCHESTRATION_COMMANDS_SOURCE_REF       Git ref for remote source fallback (default: main)
-  ORCHESTRATION_COMMANDS_SOURCE_BASE_URL  Full base URL for remote source fallback
-  ORCHESTRATION_COMMANDS_BACKUP_DIR       Override backup directory for overwritten files
+  ORCHESTRATION_COMMANDS_BACKUP_DIR   Override backup directory path for --clean
 
 Examples:
-  ./install.sh --scope project
-  ./install.sh --scope project --path /path/to/repo --command-name ship --max-loops 4
-  ./install.sh --scope global --force
+  ./install.sh --scope project --path /path/to/repo
+  ./install.sh --scope global
+  ./install.sh --scope project --path /path/to/repo --clean
 EOF
 }
 
@@ -49,126 +51,113 @@ die() {
   exit 1
 }
 
-validate_positive_int() {
-  [[ "$1" =~ ^[1-9][0-9]*$ ]]
+abs_path() {
+  python3 -c 'import os,sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$1"
 }
 
-validate_command_name() {
-  [[ "$1" =~ ^[a-zA-Z0-9_-]+$ ]]
+default_clone_dir() {
+  local repo_name
+  repo_name="${REPO##*/}"
+  printf '%s\n' "${HOME}/.local/share/opencode/sources/${repo_name}"
 }
 
-resolve_script_dir() {
-  local src
-  src="${BASH_SOURCE[0]:-}"
-  if [[ -n "$src" && "$src" != "-" && -f "$src" ]]; then
-    (cd "$(dirname "$src")" && pwd)
-    return 0
+resolve_clone_dir() {
+  local default_dir
+  default_dir="$(default_clone_dir)"
+
+  if [[ -n "${CLONE_DIR}" ]]; then
+    CLONE_DIR="$(abs_path "${CLONE_DIR}")"
+    return
   fi
 
-  return 1
+  if [[ "${NO_PROMPT}" == "1" || ! -t 0 ]]; then
+    CLONE_DIR="$(abs_path "${default_dir}")"
+    return
+  fi
+
+  log ""
+  log "Clone location for ${REPO}:"
+  read -r -p "Directory [${default_dir}]: " CLONE_DIR
+  if [[ -z "${CLONE_DIR}" ]]; then
+    CLONE_DIR="${default_dir}"
+  fi
+  CLONE_DIR="$(abs_path "${CLONE_DIR}")"
 }
 
-detect_local_source_dir() {
-  local script_dir
-  local candidate
+ensure_clone_repo() {
+  command -v git >/dev/null 2>&1 || die "git is required"
 
-  if script_dir="$(resolve_script_dir 2>/dev/null)"; then
-    candidate="$script_dir/.opencode"
-    if [[ -f "$candidate/agents/orchestrator-loop.md" && -f "$candidate/agents/impl-worker.md" && -f "$candidate/agents/reviewer.md" && -f "$candidate/commands/orchestrate.md" ]]; then
-      printf '%s\n' "$candidate"
-      return 0
+  if [[ -d "${CLONE_DIR}" ]]; then
+    [[ -d "${CLONE_DIR}/.git" ]] || die "Clone directory exists but is not a git repository: ${CLONE_DIR}"
+    log "Using existing clone: ${CLONE_DIR}"
+    log "Update later with: git -C ${CLONE_DIR} pull"
+    return
+  fi
+
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    log "[dry-run] Would clone https://github.com/${REPO}.git -> ${CLONE_DIR}"
+    return
+  fi
+
+  mkdir -p "$(dirname "${CLONE_DIR}")"
+  git clone --branch "${REF}" "https://github.com/${REPO}.git" "${CLONE_DIR}"
+  log "Cloned ${REPO}@${REF} to ${CLONE_DIR}"
+}
+
+remove_path() {
+  local path="$1"
+  local label="$2"
+
+  if [[ ! -e "${path}" && ! -L "${path}" ]]; then
+    return
+  fi
+
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    log "[dry-run] Would remove ${label}: $path"
+    return
+  fi
+
+  rm -rf "$path"
+  log "Removed ${label}: $path"
+}
+
+ensure_link() {
+  local source="$1"
+  local target="$2"
+
+  if [[ "$source" == "$target" ]]; then
+    die "Source and target are identical ($target). Choose a different --path or --clone-dir."
+  fi
+
+  if [[ "${DRY_RUN}" != "1" ]]; then
+    [[ -f "$source" ]] || die "Source file not found: $source"
+  fi
+
+  if [[ -e "$target" || -L "$target" ]]; then
+    if [[ -L "$target" ]]; then
+      local current_link
+      current_link="$(readlink "$target")"
+      if [[ "$current_link" == "$source" ]]; then
+        log "Already linked: $target"
+        return
+      fi
     fi
-  fi
 
-  return 1
-}
+    if [[ "$FORCE" != "1" ]]; then
+      die "Target already exists. Re-run with --force or --clean: $target"
+    fi
 
-fetch_remote_source() {
-  local source_rel="$1"
-  local output="$2"
-  local source_url
-
-  source_url="${SOURCE_BASE_URL}/${source_rel}"
-
-  if ! command -v curl >/dev/null 2>&1; then
-    die "curl is required for remote source fallback but is not available"
-  fi
-
-  if ! curl -fsSL "$source_url" >"$output"; then
-    die "Failed to fetch source file: $source_url"
-  fi
-}
-
-render_source_file() {
-  local source_rel="$1"
-  local output="$2"
-
-  if [[ -n "$LOCAL_SOURCE_DIR" ]]; then
-    cp "$LOCAL_SOURCE_DIR/$source_rel" "$output"
-    return 0
-  fi
-
-  fetch_remote_source "$source_rel" "$output"
-}
-
-apply_max_loops_replacements() {
-  local file="$1"
-
-  sed -E \
-    -e "s/(Max loops: )[0-9]+/\\1${MAX_LOOPS}/g" \
-    -e "s|(LOOPS_USED: n/)[0-9]+|\\1${MAX_LOOPS}|g" \
-    -e "s/(max loops )[0-9]+/\\1${MAX_LOOPS}/g" \
-    "$file" >"${file}.tmp"
-
-  mv "${file}.tmp" "$file"
-}
-
-install_from_source() {
-  local target="$1"
-  local source_rel="$2"
-  local apply_max_loops="$3"
-  local tmp_rendered
-
-  tmp_rendered="$(mktemp)"
-  render_source_file "$source_rel" "$tmp_rendered"
-
-  if [[ "$apply_max_loops" == "1" ]]; then
-    apply_max_loops_replacements "$tmp_rendered"
+    remove_path "$target" "existing install"
   fi
 
   if [[ "$DRY_RUN" == "1" ]]; then
-    log "[dry-run] Would write: $target"
-    if [[ -e "$target" && "$FORCE" == "0" ]]; then
-      local backup
-      backup="$(backup_path_for_target "$target")"
-      log "[dry-run] Would backup existing file: $backup"
-    fi
-  else
-    mkdir -p "$(dirname "$target")"
-    if [[ -e "$target" && "$FORCE" == "0" ]]; then
-      local backup
-      backup="$(backup_path_for_target "$target")"
-      mkdir -p "$(dirname "$backup")"
-      cp "$target" "$backup"
-      log "Backed up: $target -> $backup"
-    fi
-    cp "$tmp_rendered" "$target"
-    log "Installed: $target"
+    log "[dry-run] Would link: $source -> $target"
+    return
   fi
 
-  rm -f "$tmp_rendered"
-}
-
-backup_path_for_target() {
-  local target="$1"
-  local relative
-
-  relative="${target#$BASE_DIR/}"
-  if [[ "$relative" == "$target" ]]; then
-    die "Cannot compute backup path outside base directory: $target"
-  fi
-
-  printf '%s/%s.bak.%s\n' "$BACKUP_DIR" "$relative" "$TIMESTAMP"
+  mkdir -p "$(dirname "$target")"
+  ln -s "$source" "$target"
+  log "Linked: $target"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -183,22 +172,35 @@ while [[ $# -gt 0 ]]; do
       PROJECT_PATH="$2"
       shift 2
       ;;
-    --command-name)
-      [[ $# -ge 2 ]] || die "--command-name requires a value"
-      COMMAND_NAME="$2"
+    --clone-dir)
+      [[ $# -ge 2 ]] || die "--clone-dir requires a value"
+      CLONE_DIR="$2"
       shift 2
       ;;
-    --max-loops)
-      [[ $# -ge 2 ]] || die "--max-loops requires a value"
-      MAX_LOOPS="$2"
+    --repo)
+      [[ $# -ge 2 ]] || die "--repo requires a value"
+      REPO="$2"
+      shift 2
+      ;;
+    --ref)
+      [[ $# -ge 2 ]] || die "--ref requires a value"
+      REF="$2"
       shift 2
       ;;
     --force)
       FORCE="1"
       shift
       ;;
+    --clean)
+      CLEAN="1"
+      shift
+      ;;
     --dry-run)
       DRY_RUN="1"
+      shift
+      ;;
+    --no-prompt)
+      NO_PROMPT="1"
       shift
       ;;
     -h|--help)
@@ -218,9 +220,6 @@ case "$SCOPE" in
     die "Invalid --scope value '$SCOPE'. Expected project, global, or ask."
     ;;
 esac
-
-validate_command_name "$COMMAND_NAME" || die "Invalid command name '$COMMAND_NAME'. Use letters, numbers, dashes, or underscores."
-validate_positive_int "$MAX_LOOPS" || die "Invalid --max-loops '$MAX_LOOPS'. Use a positive integer."
 
 if [[ "$SCOPE" == "ask" ]]; then
   if [[ -t 0 ]]; then
@@ -257,37 +256,52 @@ else
   BACKUP_DIR="$DEFAULT_BACKUP_DIR"
 fi
 
+resolve_clone_dir
+ensure_clone_repo
+
+SOURCE_BASE_DIR="$CLONE_DIR/.opencode"
+if [[ "$DRY_RUN" != "1" ]]; then
+  [[ -f "$SOURCE_BASE_DIR/agents/orchestrator-loop.md" ]] || die "Missing source file: $SOURCE_BASE_DIR/agents/orchestrator-loop.md"
+  [[ -f "$SOURCE_BASE_DIR/agents/impl-worker.md" ]] || die "Missing source file: $SOURCE_BASE_DIR/agents/impl-worker.md"
+  [[ -f "$SOURCE_BASE_DIR/agents/reviewer.md" ]] || die "Missing source file: $SOURCE_BASE_DIR/agents/reviewer.md"
+  [[ -f "$SOURCE_BASE_DIR/commands/orchestrate.md" ]] || die "Missing source file: $SOURCE_BASE_DIR/commands/orchestrate.md"
+fi
+
 AGENTS_DIR="$BASE_DIR/agents"
 COMMANDS_DIR="$BASE_DIR/commands"
-COMMAND_FILE="$COMMANDS_DIR/${COMMAND_NAME}.md"
 
-LOCAL_SOURCE_DIR=""
-if LOCAL_SOURCE_DIR="$(detect_local_source_dir 2>/dev/null)"; then
-  SOURCE_MODE="local"
-else
-  SOURCE_MODE="remote"
-fi
+TARGET_ORCHESTRATOR="$AGENTS_DIR/orchestrator-loop.md"
+TARGET_IMPL="$AGENTS_DIR/impl-worker.md"
+TARGET_REVIEWER="$AGENTS_DIR/reviewer.md"
+TARGET_COMMAND="$COMMANDS_DIR/orchestrate.md"
+
+SOURCE_ORCHESTRATOR="$SOURCE_BASE_DIR/agents/orchestrator-loop.md"
+SOURCE_IMPL="$SOURCE_BASE_DIR/agents/impl-worker.md"
+SOURCE_REVIEWER="$SOURCE_BASE_DIR/agents/reviewer.md"
+SOURCE_COMMAND="$SOURCE_BASE_DIR/commands/orchestrate.md"
 
 if [[ "$DRY_RUN" == "1" ]]; then
   log "[dry-run] Target base: $BASE_DIR"
   log "[dry-run] Backup dir: $BACKUP_DIR"
   log "[dry-run] Scope: $SCOPE"
-  log "[dry-run] Command name: /$COMMAND_NAME"
-  log "[dry-run] Max loops: $MAX_LOOPS"
-else
-  mkdir -p "$AGENTS_DIR" "$COMMANDS_DIR"
 fi
 
-if [[ "$SOURCE_MODE" == "local" ]]; then
-  log "Using local source templates from: $LOCAL_SOURCE_DIR"
-else
-  log "Using remote source templates from: $SOURCE_BASE_URL"
+if [[ "$CLEAN" == "1" ]]; then
+  log ""
+  log "Cleaning existing installation and backups..."
+  remove_path "$TARGET_ORCHESTRATOR" "existing install"
+  remove_path "$TARGET_IMPL" "existing install"
+  remove_path "$TARGET_REVIEWER" "existing install"
+  remove_path "$TARGET_COMMAND" "existing install"
+  remove_path "$BACKUP_DIR" "backup directory"
+  FORCE="1"
 fi
 
-install_from_source "$AGENTS_DIR/orchestrator-loop.md" "agents/orchestrator-loop.md" "1"
-install_from_source "$AGENTS_DIR/impl-worker.md" "agents/impl-worker.md" "0"
-install_from_source "$AGENTS_DIR/reviewer.md" "agents/reviewer.md" "0"
-install_from_source "$COMMAND_FILE" "commands/orchestrate.md" "1"
+log ""
+ensure_link "$SOURCE_ORCHESTRATOR" "$TARGET_ORCHESTRATOR"
+ensure_link "$SOURCE_IMPL" "$TARGET_IMPL"
+ensure_link "$SOURCE_REVIEWER" "$TARGET_REVIEWER"
+ensure_link "$SOURCE_COMMAND" "$TARGET_COMMAND"
 
 if [[ "$DRY_RUN" == "1" ]]; then
   log ""
@@ -298,7 +312,7 @@ else
 fi
 
 log ""
-log "Installed command: /$COMMAND_NAME"
+log "Installed command: /orchestrate"
 log "Try:"
-log "  /$COMMAND_NAME Build a feature to ..."
-log "  /$COMMAND_NAME exec <approved plan text>"
+log "  /orchestrate Build a feature to ..."
+log "  /orchestrate exec <approved plan text>"

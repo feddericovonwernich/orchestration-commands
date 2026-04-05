@@ -13,7 +13,7 @@ Installed artifacts:
 
 ```bash
 chmod +x ./install.sh
-./install.sh
+./install.sh --scope project --path "$(pwd)"
 ```
 
 ## One-liner curl installers
@@ -30,10 +30,10 @@ curl -fsSL https://raw.githubusercontent.com/feddericovonwernich/orchestration-c
 curl -fsSL https://raw.githubusercontent.com/feddericovonwernich/orchestration-commands/main/install.sh | bash -s -- --scope global
 ```
 
-- Project install with custom command name and loop cap:
+- Project install with cleanup before linking:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/feddericovonwernich/orchestration-commands/main/install.sh | bash -s -- --scope project --path "$(pwd)" --command-name ship --max-loops 4
+curl -fsSL https://raw.githubusercontent.com/feddericovonwernich/orchestration-commands/main/install.sh | bash -s -- --scope project --path "$(pwd)" --clean
 ```
 
 ## Common options
@@ -41,34 +41,27 @@ curl -fsSL https://raw.githubusercontent.com/feddericovonwernich/orchestration-c
 ```bash
 ./install.sh --scope project --path /path/to/repo
 ./install.sh --scope global
-./install.sh --command-name ship --max-loops 4
+./install.sh --clone-dir ~/.local/share/opencode/sources/orchestration-commands
+./install.sh --clean
 ./install.sh --dry-run
 ```
 
 ## Installer source of truth
 
-- Installer content comes from repository files under `.opencode/`.
-- Re-running `install.sh` updates existing installed files to match the current source (with backups unless `--force`).
-- Backups are written outside OpenCode's config scan path by default:
-  - project scope: `<project>/.opencode-install-backups/`
-  - global scope: `~/.config/opencode-install-backups/`
-- If local `.opencode/` sources are unavailable (for example one-line curl install), installer falls back to remote raw files.
-- You can pin remote fallback source with:
-
-```bash
-ORCHESTRATION_COMMANDS_SOURCE_REF=<branch-or-tag> ./install.sh --scope project --path "$(pwd)"
-```
-
-- Or override the fallback base URL directly:
-
-```bash
-ORCHESTRATION_COMMANDS_SOURCE_BASE_URL="https://raw.githubusercontent.com/<owner>/<repo>/<ref>/.opencode" ./install.sh --scope project --path "$(pwd)"
-```
-
-- Optional: override backup location directly:
+- Installer source comes from a local git clone of this repository.
+- Installed files are symlinks to `<clone-dir>/.opencode/...`.
+- The installer prompts for clone location in interactive mode.
+- Default clone location: `~/.local/share/opencode/sources/orchestration-commands`.
+- You can override backup location used by `--clean`:
 
 ```bash
 ORCHESTRATION_COMMANDS_BACKUP_DIR="/path/to/backups" ./install.sh --scope project --path "$(pwd)"
+```
+
+- To update after installation, run:
+
+```bash
+git -C <clone-dir> pull
 ```
 
 ## Command usage
@@ -134,4 +127,4 @@ OPENCODE_LIVE_TEST=1 OPENCODE_LIVE_TIMEOUT=180 bash tests/orchestrate-live.test.
 - Commit mode is runtime-configurable: default ON, disable with `--no-commit`, re-enable with `--commit`.
 - When commit mode is ON, orchestrator commits after each implementation loop when changes exist, with message format `orchestrate(loop N): <step summary>`.
 - Orchestrator never pushes, amends, or runs destructive git commands.
-- Existing command/agent files are backed up with a timestamp unless `--force` is used.
+- Use `--clean` to remove existing install files and backup directories before relinking.
